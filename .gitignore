@@ -1,0 +1,14 @@
+# .env IS committed here, but it holds no secrets — only ODOO_URL, ODOO_DB and the
+# read-only default. Each person's API key goes straight into their local Claude config
+# via install-personal.sh, never into this file. If you ever put a real key in .env for
+# local testing, do NOT commit it: an API key is password-equivalent and git history
+# keeps it forever.
+*.key
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+dist/
+build/
+*.egg-info/

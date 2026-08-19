@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "odoo": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/absolute/path/to/odoo-claude",
+        "run",
+        "odoo-mcp"
+      ],
+      "env": {
+        "ODOO_URL": "https://rw-andersen.odoo.com",
+        "ODOO_DB": "rw-andersen",
+        "ODOO_USERNAME": "you@maj-andersen.com",
+        "ODOO_API_KEY": "PASTE_YOUR_API_KEY",
+        "ODOO_ENABLE_WRITES": "false"
+      }
+    }
+  }
+}
