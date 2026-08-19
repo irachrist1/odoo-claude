@@ -11,6 +11,13 @@ $OdooUrl = "https://rw-andersen.odoo.com"
 $OdooDb = "rw-andersen"
 $Fallback = ($env:ODOO_FALLBACK_OK -eq "1")
 
+# Credentials can arrive in the environment instead of by typing, which is the only way
+# this works with no console attached - an AI agent's shell, or CI. Read-Host there fails
+# or returns empty, so the prompt loop would burn its attempts on nothing.
+$PresetUser = $env:ODOO_USERNAME
+$PresetKey = $env:ODOO_API_KEY
+$NonInteractive = -not ([string]::IsNullOrWhiteSpace($PresetUser) -or [string]::IsNullOrWhiteSpace($PresetKey))
+
 function Write-Step($msg) { Write-Host "-> $msg" -ForegroundColor Cyan }
 
 function Test-EnvFlag($pattern) {
@@ -49,37 +56,50 @@ try {
 
     Push-Location $RepoDir
     try {
-        Write-Host ""
-        Write-Host "Sign in with your own Odoo account so Claude sees your data." -ForegroundColor White
-        Write-Host ""
-        Write-Host "Opening Odoo in your browser. Once it loads:" -ForegroundColor White
-        Write-Host "  1. Click your photo (top-right)  ->  My Profile"
-        Write-Host "  2. Open the  Account Security  tab"
-        Write-Host "  3. Click  New API Key , name it 'claude', and copy the key"
-        Write-Host ""
-        if ($env:ODOO_MCP_NO_BROWSER -eq "1") {
-            Write-Host "  (Open $OdooUrl yourself)" -ForegroundColor DarkGray
+        if ($NonInteractive) {
+            Write-Host ""
+            Write-Step "Using the Odoo credentials from the environment..."
         }
         else {
-            try { Start-Process $OdooUrl } catch { Write-Host "  (Open $OdooUrl yourself)" -ForegroundColor DarkGray }
+            Write-Host ""
+            Write-Host "Sign in with your own Odoo account so Claude sees your data." -ForegroundColor White
+            Write-Host ""
+            Write-Host "Opening Odoo in your browser. Once it loads:" -ForegroundColor White
+            Write-Host "  1. Click your photo (top-right)  ->  My Profile"
+            Write-Host "  2. Open the  Account Security  tab"
+            Write-Host "  3. Click  New API Key , name it 'claude', and copy the key"
+            Write-Host ""
+            if ($env:ODOO_MCP_NO_BROWSER -eq "1") {
+                Write-Host "  (Open $OdooUrl yourself)" -ForegroundColor DarkGray
+            }
+            else {
+                try { Start-Process $OdooUrl } catch { Write-Host "  (Open $OdooUrl yourself)" -ForegroundColor DarkGray }
+            }
         }
 
         if ($Fallback) { $SkipHint = " (or press Enter to use the shared company account)" } else { $SkipHint = "" }
 
         $Ok = $false
-        for ($Attempt = 1; $Attempt -le 3 -and -not $Ok; $Attempt++) {
-            $Email = (Read-Host "Your Odoo email$SkipHint").Trim()
+        if ($NonInteractive) { $MaxAttempts = 1 } else { $MaxAttempts = 3 }
+        for ($Attempt = 1; $Attempt -le $MaxAttempts -and -not $Ok; $Attempt++) {
+            if ($NonInteractive) {
+                $Email = $PresetUser.Trim()
+                $Key = $PresetKey.Trim()
+            }
+            else {
+                $Email = (Read-Host "Your Odoo email$SkipHint").Trim()
 
-            if ([string]::IsNullOrWhiteSpace($Email) -and $Fallback) { exit 2 }
+                if ([string]::IsNullOrWhiteSpace($Email) -and $Fallback) { exit 2 }
 
-            $KeySecure = Read-Host "Paste your API key (hidden)" -AsSecureString
-            $Key = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-                [Runtime.InteropServices.Marshal]::SecureStringToBSTR($KeySecure)).Trim()
+                $KeySecure = Read-Host "Paste your API key (hidden)" -AsSecureString
+                $Key = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+                    [Runtime.InteropServices.Marshal]::SecureStringToBSTR($KeySecure)).Trim()
 
-            if ([string]::IsNullOrWhiteSpace($Email) -or [string]::IsNullOrWhiteSpace($Key)) {
-                Write-Host "Both are needed - let's try again." -ForegroundColor Yellow
-                Write-Host ""
-                continue
+                if ([string]::IsNullOrWhiteSpace($Email) -or [string]::IsNullOrWhiteSpace($Key)) {
+                    Write-Host "Both are needed - let's try again." -ForegroundColor Yellow
+                    Write-Host ""
+                    continue
+                }
             }
 
             # Fallbacks: a personal bundle's .env supplies these, but set them anyway
@@ -94,6 +114,11 @@ try {
             & uv run python test_connection.py
             if ($LASTEXITCODE -eq 0) {
                 $Ok = $true
+            }
+            elseif ($NonInteractive) {
+                Write-Host ""
+                Write-Host "Those credentials didn't work. Check ODOO_USERNAME is the Odoo login email" -ForegroundColor Yellow
+                Write-Host "and that ODOO_API_KEY is the full key from My Profile -> Account Security." -ForegroundColor Yellow
             }
             elseif ($Attempt -lt 3) {
                 Write-Host ""

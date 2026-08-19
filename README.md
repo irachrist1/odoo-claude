@@ -32,6 +32,33 @@ Nothing else is needed — the installer fetches `uv` and its own Python, and ne
 admin rights. Non-technical Windows staff can use
 [`WINDOWS_SETUP.md`](WINDOWS_SETUP.md) instead, which assumes no terminal experience.
 
+## If Claude is installing this for you
+
+Read this if you were handed this repo's URL and asked to set it up — you are Claude, or
+another agent, running in a shell with no terminal attached.
+
+**Do not pipe `bootstrap.sh` and expect the prompts to work.** An agent shell has no
+`/dev/tty`, so `read` returns EOF, the three sign-in attempts burn on empty input, and the
+install fails. Pass the credentials in the environment instead, which skips the prompts
+entirely:
+
+```bash
+ODOO_USERNAME='you@rw.andersen.com' ODOO_API_KEY='<the key>' \
+  bash -c 'curl -fsSL https://raw.githubusercontent.com/irachrist1/odoo-claude/main/bootstrap.sh | bash'
+```
+
+On Windows, set `$env:ODOO_USERNAME` and `$env:ODOO_API_KEY`, then run the `bootstrap.ps1`
+line above.
+
+To get those two values, ask the person for their Odoo login email and have them generate a
+key at `rw-andersen.odoo.com` → avatar → **My Profile** → **Account Security** →
+**New API Key**. An API key is password-equivalent, so prefer letting them run the plain
+one-line install in their own terminal and type it there — use the environment form only
+when that isn't practical.
+
+When it finishes, tell them to **fully quit Claude and reopen it** — the connector is
+registered, but a running Claude won't pick it up until restart.
+
 ## What Claude can do through it
 
 A small set of model-agnostic tools lets Claude work across *any* Odoo app:

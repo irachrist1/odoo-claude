@@ -12,7 +12,37 @@ ODOO_URL="${ODOO_URL:-https://rw-andersen.odoo.com}"
 ODOO_DB="${ODOO_DB:-rw-andersen}"
 FALLBACK="${ODOO_FALLBACK_OK:-}"
 
+# Credentials can arrive in the environment instead of by typing. That is the only way
+# this works with no terminal attached — an AI agent's shell, CI, or `curl | bash` where
+# /dev/tty can't be opened — because `read` there returns EOF instantly and the prompt
+# loop burns its three attempts on empty input.
+PRESET_USERNAME="${ODOO_USERNAME:-}"
+PRESET_API_KEY="${ODOO_API_KEY:-}"
+
 writes_on() { [ -f "$ENV_FILE" ] && grep -qiE '^ODOO_ENABLE_WRITES=(1|true|yes|on)[[:space:]]*$' "$ENV_FILE"; }
+
+register_and_finish() {
+  echo
+  echo "→ Registering the connector in Claude Desktop…"
+  ( cd "$REPO_DIR" && uv run python setup_claude.py )
+
+  echo
+  echo "→ Checking Claude Desktop can start it…"
+  if ! ( cd "$REPO_DIR" && uv run python verify_connector.py ); then
+    echo
+    echo "❌ The connector was registered but wouldn't start. Send Christian this output."
+    exit 1
+  fi
+
+  echo
+  echo "✅ Done. Quit Claude Desktop completely, reopen it, then ask it about Odoo."
+  if writes_on; then
+    echo "   ⚠️  WRITES ARE ENABLED — Claude can create and change real Odoo records."
+  else
+    echo "   Claude can read Odoo but not change anything."
+  fi
+  exit 0
+}
 
 # When called directly (no fallback available) we own the whole install, banner included.
 if [ -z "$FALLBACK" ]; then
@@ -36,6 +66,22 @@ if [ -z "$FALLBACK" ]; then
 
   echo "→ Installing dependencies (first run downloads Python, be patient)…"
   ( cd "$REPO_DIR" && uv sync >/dev/null )
+fi
+
+if [ -n "$PRESET_USERNAME" ] && [ -n "$PRESET_API_KEY" ]; then
+  echo
+  echo "→ Using the Odoo credentials from the environment…"
+  export ODOO_USERNAME="$PRESET_USERNAME" ODOO_API_KEY="$PRESET_API_KEY" ODOO_URL ODOO_DB
+  if ( cd "$REPO_DIR" && uv run python test_connection.py ); then
+    register_and_finish
+  fi
+  echo
+  echo "❌ Those credentials didn't work. Check ODOO_USERNAME is the Odoo login email and"
+  echo "   that ODOO_API_KEY is the full key from My Profile → Account Security."
+  if [ -n "$FALLBACK" ]; then
+    exit 2
+  fi
+  exit 1
 fi
 
 echo
@@ -104,22 +150,4 @@ if [ "$ok" -ne 1 ]; then
   exit 1
 fi
 
-echo
-echo "→ Registering the connector in Claude Desktop…"
-( cd "$REPO_DIR" && uv run python setup_claude.py )
-
-echo
-echo "→ Checking Claude Desktop can start it…"
-if ! ( cd "$REPO_DIR" && uv run python verify_connector.py ); then
-  echo
-  echo "❌ The connector was registered but wouldn't start. Send Christian this output."
-  exit 1
-fi
-
-echo
-echo "✅ Done. Quit Claude Desktop completely, reopen it, then ask it about Odoo."
-if writes_on; then
-  echo "   ⚠️  WRITES ARE ENABLED — Claude can create and change real Odoo records."
-else
-  echo "   Claude can read Odoo but not change anything."
-fi
+register_and_finish
